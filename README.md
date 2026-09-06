@@ -23,7 +23,7 @@ Each row is one telecom customer, covering four areas:
 - **Demographics** `customer_id`, `full_name`, `gender`, `age`, `region`, `city`, `phone_number`, `email`
 - **Plan & subscription** `sim_type`, `plan_name`, `plan_price`, `activation_date`, `contract_length_months`
 - **Usage & billing** `monthly_data_used_gb`, `monthly_voice_minutes`, `monthly_sms_count`, `monthly_bill_amount`, `payment_method`, `payment_status`, `last_payment_date`, `account_balance`
-- **Device, service & churn** — `device_type`, `device_brand`, `network_type`, `customer_service_calls`, `complaint_type`, `satisfaction_score`, `churn_status`, `signup_channel`, `referral_code`
+- **Device, service & churn** `device_type`, `device_brand`, `network_type`, `customer_service_calls`, `complaint_type`, `satisfaction_score`, `churn_status`, `signup_channel`, `referral_code`
 
 
 ## 3. What the Data Looked Like *Before* Cleaning
@@ -36,11 +36,11 @@ looks like:
 |---|---|
 | Inconsistent casing | `Prepaid`, `PREPAID`, `prepaid` all present |
 | Leading/trailing whitespace | `"  Prepaid  "` |
-| Inconsistent region spelling/casing | `Mogadishu`, `Benadir`, `banaadir`, `BAY`, `bay` — same regions, multiple spellings |
+| Inconsistent region spelling/casing | `Mogadishu`, `Benadir`, `banaadir`, `BAY`, `bay` same regions, multiple spellings |
 | Inconsistent phone formats | `+252612345678`, `0612345678`, `061 234 5678` |
 | Numbers stored as text | `"$5.00"`, `"27.4 USD"` |
 | Impossible values | Ages of `-5`, `0`, `150`; negative bills |
-| Mixed date formats | `2024-05-01`, `01/05/2024`, `05-01-2024`, `01-May-2024`, `2024/05/01` — all 5 present across two date columns |
+| Mixed date formats | `2024-05-01`, `01/05/2024`, `05-01-2024`, `01-May-2024`, `2024/05/01` all 5 present across two date columns |
 | Outliers | A handful of customers with 500+ GB monthly data use |
 | Duplicate rows | 150 exact duplicate customer records |
 | Missing values | Blanks and `N/A` scattered across `email`, `device_brand`, `complaint_type`, `contract_length_months`, `last_payment_date`, `satisfaction_score`, `referral_code` |
@@ -51,7 +51,7 @@ looks like:
 All 14 steps live in `Telecom Cleaning Steps.sql`, meant to be run one
 at a time. Summary of what each stage does and why:
 
-### Step 1 — Load as text first
+### Step 1 Load as text first
 Every column was imported as `VARCHAR`. Numeric and date columns had
 mixed formats and stray text (`$`, `USD`), so casting to `INT`/`DECIMAL`/`DATE`
 immediately would have failed or silently dropped rows.
@@ -91,11 +91,11 @@ JOIN (
 ) d ON c.row_id = d.row_id;
 ```
 
-### Step 4 — Trim whitespace
+### Step 4 Trim whitespace
 `TRIM()` applied to every text column to remove padding spaces that
 would otherwise break exact-match comparisons later.
 
-### Steps 5–8 — Standardize categories
+### Steps 5–8 Standardize categories
 `gender`, `sim_type`, `region`, `payment_method`, `signup_channel`, and
 `churn_status` were each collapsed to one consistent spelling/casing,
 e.g.:
@@ -111,7 +111,7 @@ SET region = CASE
 END;
 ```
 
-### Step 9 — Fix currency-as-text
+### Step 9 Fix currency-as-text
 Stripped `$` and `USD`, cast to `DECIMAL(10,2)`, and corrected negative
 bill amounts by taking the absolute value (a sign error, not a real
 refund/credit):
@@ -122,11 +122,11 @@ SET monthly_bill_clean = ABS(monthly_bill_clean)
 WHERE monthly_bill_clean < 0;
 ```
 
-### Step 10 — Fix age outliers
+### Step 10 Fix age outliers
 Ages outside a plausible 10–100 range were set to `NULL` rather than
 guessed at this stage — they get filled properly in Step 13.
 
-### Step 11 — Standardize dates
+### Step 11 Standardize dates
 Five different date formats were detected with `REGEXP` and converted
 with the matching `STR_TO_DATE` pattern:
 
@@ -142,9 +142,9 @@ SET activation_date_clean = CASE
 END;
 ```
 
-### Step 12 — Handle obvious blanks
+### Step 12 Handle obvious blanks
 `complaint_type` → `'None'`, `device_brand` → `'Unknown'`, `email` →
-placeholder — values where "missing" itself is a meaningful, valid
+placeholder values where "missing" itself is a meaningful, valid
 category.
 
 
