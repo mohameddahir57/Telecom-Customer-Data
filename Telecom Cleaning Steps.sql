@@ -1,15 +1,10 @@
--- =========================================================
 -- TELECOM CUSTOMER DATA CLEANING PROJECT
 -- Run each STEP one at a time. Check the result before moving to the next.
--- =========================================================
 
-
--- =========================================================
 -- STEP 0: Setup — database + raw staging table
 -- Everything is VARCHAR here on purpose. The raw file has currency
 -- symbols in number columns and 5 different date formats, so forcing
 -- INT/DECIMAL/DATE now would make the whole import fail.
--- =========================================================
 CREATE DATABASE IF NOT EXISTS telecom_project;
 USE telecom_project;
 
@@ -47,13 +42,10 @@ CREATE TABLE customers_raw (
     account_balance         VARCHAR(20)
 );
 
-
--- =========================================================
 -- STEP 1: Load the CSV
 -- Adjust the path to wherever you saved telecom_customers_raw.csv.
 -- If LOAD DATA LOCAL is blocked on your MySQL setup, use
 -- MySQL Workbench > Table Data Import Wizard instead — same result.
--- =========================================================
 LOAD DATA LOCAL INFILE '/path/to/telecom_customers_raw.csv'
 INTO TABLE customers_raw
 FIELDS TERMINATED BY ','
@@ -65,10 +57,8 @@ IGNORE 1 ROWS;
 SELECT COUNT(*) FROM customers_raw;
 
 
--- =========================================================
 -- STEP 2: Look at what's actually wrong first
 -- Don't clean blind — check each column before writing fixes.
--- =========================================================
 SELECT DISTINCT gender FROM customers_raw;
 SELECT DISTINCT sim_type FROM customers_raw;
 SELECT DISTINCT region FROM customers_raw;
@@ -82,10 +72,8 @@ SELECT COUNT(*) AS null_complaint    FROM customers_raw WHERE complaint_type IS 
 SELECT COUNT(*) AS null_device_brand FROM customers_raw WHERE device_brand IS NULL OR device_brand = '';
 
 
--- =========================================================
 -- STEP 3: Remove exact duplicate rows
 -- The file has ~150 duplicated customer records.
--- =========================================================
 CREATE TEMPORARY TABLE dupes_to_delete AS
 SELECT customer_id
 FROM (
@@ -113,10 +101,8 @@ JOIN (
 SELECT COUNT(*) FROM customers_raw; -- should now be ~10,000
 
 
--- =========================================================
 -- STEP 4: Trim whitespace on every text column
 -- Some values came in as "  Prepaid  " with padding spaces.
--- =========================================================
 UPDATE customers_raw SET
     full_name       = TRIM(full_name),
     gender          = TRIM(gender),
@@ -134,10 +120,8 @@ UPDATE customers_raw SET
     signup_channel  = TRIM(signup_channel);
 
 
--- =========================================================
 -- STEP 5: Standardize gender
 -- Male/male/M -> "Male", Female/female/F -> "Female"
--- =========================================================
 UPDATE customers_raw
 SET gender = CASE
     WHEN UPPER(gender) IN ('MALE','M') THEN 'Male'
@@ -146,9 +130,7 @@ SET gender = CASE
 END;
 
 
--- =========================================================
 -- STEP 6: Standardize sim_type
--- =========================================================
 UPDATE customers_raw
 SET sim_type = CASE
     WHEN UPPER(sim_type) = 'PREPAID'  THEN 'Prepaid'
@@ -157,10 +139,8 @@ SET sim_type = CASE
 END;
 
 
--- =========================================================
 -- STEP 7: Standardize region names
 -- "Mogadishu", "Benadir", "banaadir" all mean the same region.
--- =========================================================
 UPDATE customers_raw
 SET region = CASE
     WHEN UPPER(region) IN ('MOGADISHU','BENADIR','BANAADIR') THEN 'Banaadir'
@@ -171,9 +151,7 @@ SET region = CASE
 END;
 
 
--- =========================================================
 -- STEP 8: Standardize payment_method, payment_status, signup_channel, churn_status
--- =========================================================
 UPDATE customers_raw
 SET payment_method = CONCAT(UPPER(LEFT(payment_method,1)), LOWER(SUBSTRING(payment_method,2)));
 
@@ -188,10 +166,8 @@ SET churn_status = CASE
 END;
 
 
--- =========================================================
 -- STEP 9: Fix currency-as-text columns (plan_price, monthly_bill_amount)
 -- Strip "$" and "USD" then convert to a clean decimal column.
--- =========================================================
 UPDATE customers_raw
 SET plan_price = REPLACE(REPLACE(plan_price, '$', ''), '.00', '');
 
@@ -211,11 +187,9 @@ SET monthly_bill_clean = ABS(monthly_bill_clean)
 WHERE monthly_bill_clean < 0;
 
 
--- =========================================================
 -- STEP 10: Fix age outliers
 -- Some ages are 0, negative, or 150 — impossible values.
 -- Set them NULL so they don't skew analysis, rather than guessing a number.
--- =========================================================
 ALTER TABLE customers_raw ADD COLUMN age_clean INT;
 
 UPDATE customers_raw
@@ -225,11 +199,9 @@ SET age_clean = CASE
 END;
 
 
--- =========================================================
 -- STEP 11: Standardize dates (activation_date, last_payment_date)
 -- The raw file mixes 5 formats: YYYY-MM-DD, DD/MM/YYYY, MM-DD-YYYY,
 -- DD-Mon-YYYY, YYYY/MM/DD. STR_TO_DATE needs to try each pattern.
--- =========================================================
 ALTER TABLE customers_raw ADD COLUMN activation_date_clean DATE;
 ALTER TABLE customers_raw ADD COLUMN last_payment_date_clean DATE;
 
@@ -254,9 +226,7 @@ SET last_payment_date_clean = CASE
 END;
 
 
--- =========================================================
 -- STEP 12: Handle N/A and empty values in remaining columns
--- =========================================================
 UPDATE customers_raw
 SET complaint_type = 'None'
 WHERE complaint_type IS NULL OR complaint_type = '' OR complaint_type = 'None';
@@ -274,12 +244,10 @@ SET email = 'unknown@unknown.com'
 WHERE email IS NULL OR email = '';
 
 
--- =========================================================
 -- STEP 13: Fill every remaining null so no column is left empty
 -- Run this AFTER Steps 9-11 (currency, age, date columns must already
 -- be cleaned into plan_price_clean / monthly_bill_clean / age_clean /
 -- activation_date_clean / last_payment_date_clean before this runs).
--- =========================================================
 
 -- age_clean: fill with the median age instead of leaving blank
 SET @median_age = (
@@ -317,9 +285,7 @@ SET referral_code = 'NONE'
 WHERE referral_code IS NULL OR referral_code = '';
 
 
--- =========================================================
 -- STEP 14: Build the final clean table with proper data types
--- =========================================================
 DROP TABLE IF EXISTS customers_clean;
 CREATE TABLE customers_clean AS
 SELECT
